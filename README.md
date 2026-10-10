@@ -1,3 +1,4 @@
+
 # Server OS Midterm — Penguins
 
 **Course:** 192-442 Server Operating System  
@@ -26,6 +27,22 @@ This project investigates and repairs DNS and DHCP failures in a simulated compa
 
 The investigation follows an evidence-based process: observe failures, identify causes, apply corrective actions, and verify recovery from the client's perspective.
 
+### Network Architecture
+
+```mermaid
+flowchart LR
+    DHCP["ISC DHCP Server<br/>DNS Option 6"]
+    Client["Client<br/>192.168.19.104"]
+    DNS["BIND9 DNS Server<br/>192.168.19.10"]
+    Records["Authoritative DNS Records<br/>novapeak.lab"]
+
+    DHCP -->|"IP lease and DNS settings"| Client
+    Client -->|"DNS queries: UDP/53"| DNS
+    DNS --> Records
+```
+
+The DHCP server provides the client with its network configuration, including the internal DNS server address. The client then queries BIND9 to resolve company hostnames within `novapeak.lab`.
+
 ## Technical Recovery Summary
 
 - **Environment:** NovaPeak internal DNS and DHCP services
@@ -41,9 +58,18 @@ The investigation identified and corrected four faults affecting service configu
 
 Corrections were verified through configuration validation, service checks, client-side DNS queries, and repeated execution of the official checker.
 
-The checker progression was:
+### Verified Recovery Progression
 
-**11.0 → 12.0 → 18.25 → 19.0 → 25.0 / 25**
+```mermaid
+flowchart LR
+    A["Initial<br/>11/25"]
+    B["DNS Zone Fixed<br/>12/25"]
+    C["Firewall Fixed<br/>18.25/25"]
+    D["API Record Fixed<br/>19/25"]
+    E["DHCP DNS Fixed<br/>25/25"]
+
+    A --> B --> C --> D --> E
+```
 
 All 11 official checks passed in the final verification.
 
