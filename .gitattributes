@@ -1,0 +1,3 @@
+checker_result.txt -text
+session.log -text
+fixed-configs/** -text
