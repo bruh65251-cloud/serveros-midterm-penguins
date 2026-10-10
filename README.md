@@ -26,10 +26,35 @@ This project investigates and repairs DNS and DHCP failures in a simulated compa
 
 The investigation follows an evidence-based process: observe failures, identify causes, apply corrective actions, and verify recovery from the client's perspective.
 
+## Technical Recovery Summary
+
+- **Environment:** NovaPeak internal DNS and DHCP services
+- **Initial checker result:** 11.0/25
+- **Final checker result:** 25.0/25
+
+The investigation identified and corrected four faults affecting service configuration, network accessibility, DNS record accuracy, and DHCP–DNS integration.
+
+1. **DNS zone loading:** An invalid file reference in `named.conf.local` prevented BIND from loading the authoritative forward zone.
+2. **Network access:** An inbound firewall rule dropped UDP traffic destined for port 53, preventing clients from reaching the DNS service.
+3. **DNS record accuracy:** The authoritative A record for `api.novapeak.lab` contained an incorrect IPv4 address, which was corrected to `192.168.19.40`.
+4. **DHCP–DNS integration:** DHCP Option 6 advertised `8.8.8.8` instead of the internal DNS server `192.168.19.10`.
+
+Corrections were verified through configuration validation, service checks, client-side DNS queries, and repeated execution of the official checker.
+
+The checker progression was:
+
+**11.0 → 12.0 → 18.25 → 19.0 → 25.0 / 25**
+
+All 11 official checks passed in the final verification.
+
+Detailed diagnostic evidence, technical reasoning, corrective actions, and confirmation results are documented in `INCIDENT_LOG.md` and the original terminal recording.
+
 ## Submission Contents
 
-- `fixed-configs/` — Repaired DNS and DHCP configurations
-- `INCIDENT_LOG.md` — Fault analysis and supporting evidence
-- `AI_CRITIQUE.md` — AI usage declaration and critical evaluation
-- `session.log` — Recorded terminal investigation
-- `checker_result.txt` — Final verification results
+- `fixed-configs/` — Six collected DNS and DHCP configuration files.
+- `INCIDENT_LOG.md` — Evidence-based fault investigation, diagnosis, corrections, and verification.
+- `AI_CRITIQUE.md` — AI assistance declaration, comparison, and critical evaluation.
+- `session.log` — Original recorded terminal investigation.
+- `checker_result.txt` — Final official checker result (25.0/25).
+
+The submitted configuration files and verification evidence originate from the completed Killercoda environment.
