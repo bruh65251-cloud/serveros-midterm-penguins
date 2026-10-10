@@ -284,3 +284,107 @@ Fill in ONE entry per confirmed fault. Each entry must include actual command ou
 - **Found/proved by:** Ye Myat Aung (6705142009); recorded evidence reviewed and documented by Preston Shah Aman (6705142025).
 
 ---
+## Fault 4 — Incorrect DNS Server Advertised by DHCP
+
+- **Symptom (what we observed):**
+
+  After correcting the DNS configuration, firewall rule, and API record, direct DNS queries worked. However, clients using the DNS resolver provided by DHCP still could not resolve the internal company domain.
+
+  The official checker reported:
+
+  ```text
+  [   0/3 ] C9   DHCP advertises 8.8.8.8, expected the company DNS 192.168.19.10
+  [   0/3 ] C11  using the leased resolver 8.8.8.8, www did not resolve to 192.168.19.20 (got nothing).
+  TOTAL: 19.0 / 25
+  ```
+
+  The remaining failure involved DHCP–DNS integration rather than the availability of the DNS service itself.
+
+- **Hypothesis (what we suspected and why):**
+
+  DHCP was assigning network addresses successfully, but clients were receiving the wrong DNS server.
+
+  We suspected that DHCP Option 6 (`domain-name-servers`) was configured with a public resolver instead of NovaPeak's internal DNS server, `192.168.19.10`.
+
+  A public DNS resolver would not have the company's internal authoritative records for `novapeak.lab`.
+
+- **Proof (the command that confirmed the cause):**
+
+  Inspection of the DHCP configuration showed:
+
+  ```text
+  root@ubuntu:~$ nl -ba /etc/dhcp/dhcpd.conf
+
+  1  option domain-name "novapeak.lab";
+  2  default-lease-time 3600;
+  3  max-lease-time 7200;
+  5  subnet 192.168.19.0 netmask 255.255.255.0 {
+  6      range 192.168.19.104 192.168.19.144;
+  7      option routers 192.168.19.1;
+  8      option domain-name-servers 8.8.8.8;
+  9  }
+  ```
+
+  This confirmed that DHCP was advertising `8.8.8.8`, while the company DNS server was `192.168.19.10`.
+
+  The checker independently identified the same incorrect leased resolver.
+
+- **Fix (what we changed):**
+
+  Backed up `/etc/dhcp/dhcpd.conf` and verified that the backup matched the original configuration.
+
+  Corrected DHCP Option 6:
+
+  ```bash
+  sed -i 's/option domain-name-servers 8\.8\.8\.8;/option domain-name-servers 192.168.19.10;/' /etc/dhcp/dhcpd.conf
+  ```
+
+  Only the advertised DNS server was changed. The existing subnet, address pool, gateway, and company domain settings were preserved.
+
+  Validated the configuration and restarted the DHCP service:
+
+  ```bash
+  dhcpd -t -cf /etc/dhcp/dhcpd.conf
+  systemctl restart isc-dhcp-server
+  systemctl is-active isc-dhcp-server
+  ```
+
+- **Confirmation (output showing it now works):**
+
+  The corrected DHCP configuration contained:
+
+  ```text
+  8:      option domain-name-servers 192.168.19.10;
+  ```
+
+  DHCP configuration validation completed without errors, and the service reported:
+
+  ```text
+  active
+  ```
+
+  The official checker then reported:
+
+  ```text
+  [   2/2 ] C4   named-checkconf -z clean; named-checkzone clean
+  [   2/2 ] C5   dhcpd -t clean; service running
+  [   2/2 ] C1   named is authoritative for novapeak.lab and reachable from the client.
+  [ 3.0/3 ] C2   all four A records correct
+  [   2/2 ] C3   reverse lookup of 192.168.19.10 returns ns1.
+  [   3/3 ] C6   client obtained a lease: 192.168.19.104
+  [ 2.0/2 ] C7   pool+netmask correct
+  [   2/2 ] C8   gateway advertised correctly
+  [   3/3 ] C9   DHCP advertises the company DNS (192.168.19.10)
+  [   1/1 ] C10  company domain advertised
+  [   3/3 ] C11  client resolves www via the leased resolver
+  --------------------------------------------------
+  TOTAL: 25.0 / 25
+  ```
+
+  The checker improved from **19.0/25 to 25.0/25**.
+
+  This verified that clients received the correct internal DNS server through DHCP and could resolve the company hostname using their leased resolver. All 11 official checks passed.
+
+- **Found/proved by:** Pyae Phyo Paing (6705142024); recorded evidence reviewed and documented by Hashir Khan (6705142019).
+
+---
