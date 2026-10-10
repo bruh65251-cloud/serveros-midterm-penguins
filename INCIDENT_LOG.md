@@ -188,3 +188,99 @@ Fill in ONE entry per confirmed fault. Each entry must include actual command ou
 - **Found/proved by:** Ye Myat Aung (6705142009); recorded evidence reviewed and documented by Sai Soom Rath (6705142034).
 
 ---
+## Fault 3 — Incorrect API DNS A Record
+
+- **Symptom (what we observed):**
+
+  After restoring DNS connectivity, the client could query the authoritative DNS server, but the API hostname returned an incorrect IPv4 address.
+
+  Inspection of the forward-zone database showed:
+
+  ```text
+  root@ubuntu:~$ nl -ba /etc/bind/db.novapeak.lab
+  4  ns1 IN A 192.168.19.10
+  5  www IN A 192.168.19.20
+  6  mail IN A 192.168.19.30
+  7  api IN A 192.168.19.1
+  ```
+
+  A client-side DNS query confirmed the incorrect response:
+
+  ```text
+  root@ubuntu:~$ ip netns exec client dig @192.168.19.10 api.novapeak.lab A +noall +answer +comments
+
+  ;; ANSWER SECTION:
+  api.novapeak.lab.  3600  IN  A  192.168.19.1
+  ```
+
+- **Hypothesis (what we suspected and why):**
+
+  DNS connectivity was functioning, but the returned address was incorrect. We suspected an inaccurate A record in the authoritative forward-zone database rather than another network or firewall problem.
+
+  The issue appeared isolated to the API hostname because the other company A records were correct.
+
+- **Proof (the command that confirmed the cause):**
+
+  The zone file directly contained the incorrect record:
+
+  ```text
+  root@ubuntu:~$ nl -ba /etc/bind/db.novapeak.lab
+  7  api IN A 192.168.19.1
+  ```
+
+  The client received the same address from the authoritative DNS server. This confirmed that the wrong answer originated from the stored DNS record, not from client-side resolution failure.
+
+- **Fix (what we changed):**
+
+  Backed up the original forward-zone database and verified the backup.
+
+  Corrected the API A record:
+
+  ```bash
+  sed -i 's/^api IN A 192\.168\.19\.1$/api IN A 192.168.19.40/' /etc/bind/db.novapeak.lab
+  ```
+
+  Updated the forward-zone SOA serial from `2024010101` to `2026101001` to reflect the zone modification.
+
+  No changes were made to the other A records or the reverse-zone database.
+
+- **Confirmation (output showing it now works):**
+
+  The corrected record and updated SOA serial were verified:
+
+  ```text
+  2:@ IN SOA ns1.novapeak.lab. admin.novapeak.lab. ( 2026101001 3600 1800 604800 3600 )
+  7:api IN A 192.168.19.40
+  ```
+
+  Zone validation succeeded:
+
+  ```text
+  root@ubuntu:~$ named-checkzone novapeak.lab /etc/bind/db.novapeak.lab
+  zone novapeak.lab/IN: loaded serial 2026101001
+  OK
+  ```
+
+  BIND restarted successfully and reported `active`.
+
+  The client then received the correct API address:
+
+  ```text
+  root@ubuntu:~$ ip netns exec client dig @192.168.19.10 api.novapeak.lab A +noall +answer +comments
+
+  ;; ANSWER SECTION:
+  api.novapeak.lab.  3600  IN  A  192.168.19.40
+  ```
+
+  The official checker confirmed:
+
+  ```text
+  [ 3.0/3 ] C2   all four A records correct
+  TOTAL: 19.0 / 25
+  ```
+
+  The checker increased from 18.25/25 to 19.0/25. The remaining failures concerned DHCP advertising the wrong DNS resolver, not the API record.
+
+- **Found/proved by:** Ye Myat Aung (6705142009); recorded evidence reviewed and documented by Preston Shah Aman (6705142025).
+
+---
