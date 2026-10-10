@@ -93,34 +93,98 @@ Fill in ONE entry per confirmed fault. Each entry must include actual command ou
 
 ---
 
-## Fault 2
+## Fault 2 — Firewall Blocking DNS Queries on UDP Port 53
 
 - **Symptom (what we observed):**
 
+  After correcting the forward-zone file reference, BIND successfully loaded its zones, but the client still could not reach the internal DNS server.
+
+  A DNS query from the client namespace failed:
+
   ```text
-  <Paste actual command and failure output>
+  root@ubuntu:~$ ip netns exec client dig @192.168.19.10 www.novapeak.lab A +time=2 +tries=1
+  ;; communications error to 192.168.19.10#53: timed out
+  ;; no servers could be reached
   ```
+
+  This indicated that a valid DNS configuration alone was not sufficient to make the service accessible to clients.
 
 - **Hypothesis (what we suspected and why):**
 
-  <Explain the technical hypothesis supported by the symptoms>
+  The BIND configuration permitted queries with `listen-on { any; };` and `allow-query { any; };`.
+
+  Because the DNS service was configured to accept queries but the client received no response, we suspected that network filtering was preventing DNS packets from reaching the service.
+
+  The firewall was investigated before making further changes to BIND.
 
 - **Proof (the command that confirmed the cause):**
 
+  The firewall rules showed an explicit DROP rule for UDP destination port 53:
+
   ```text
-  <Paste actual command and confirming output>
+  root@ubuntu:~$ iptables -L INPUT -n -v --line-numbers
+
+  Chain INPUT (policy ACCEPT 1648 packets, 135K bytes)
+  num   pkts bytes target  prot opt in out source       destination
+  1        6   517 DROP    17   --  *  *   0.0.0.0/0    0.0.0.0/0    udp dpt:53
   ```
+
+  After another failed client DNS query, the rule's packet counter increased:
+
+  ```text
+  root@ubuntu:~$ iptables -L INPUT -n -v --line-numbers
+
+  Chain INPUT (policy ACCEPT 1847 packets, 150K bytes)
+  num   pkts bytes target  prot opt in out source       destination
+  1        7   602 DROP    17   --  *  *   0.0.0.0/0    0.0.0.0/0    udp dpt:53
+  ```
+
+  The increase from 6 to 7 dropped packets, together with the client timeout, provided direct evidence that the firewall rule was blocking DNS traffic.
 
 - **Fix (what we changed):**
 
-  <Describe the actual corrective action>
+  First, saved the existing firewall rules and verified the backup:
+
+  ```bash
+  iptables-save -c > /root/iptables.before-dns-fix.rules
+  ```
+
+  ```text
+  Firewall backup verified
+  ```
+
+  Then removed the specific rule blocking inbound UDP port 53:
+
+  ```bash
+  iptables -D INPUT -p udp --dport 53 -j DROP
+  ```
+
+  The corrective action targeted the blocking firewall rule rather than changing unrelated DNS or network settings.
 
 - **Confirmation (output showing it now works):**
 
+  The subsequent firewall listing no longer contained the UDP port 53 DROP rule.
+
+  Repeating the same client-side DNS query produced a successful authoritative response:
+
   ```text
-  <Paste actual verification output>
+  root@ubuntu:~$ ip netns exec client dig @192.168.19.10 www.novapeak.lab A +time=2 +tries=1
+
+  ;; Got answer:
+  ;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 20762
+  ;; flags: qr aa rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+  ;; ANSWER SECTION:
+  www.novapeak.lab.  3600  IN  A  192.168.19.20
+
+  ;; Query time: 0 msec
+  ;; SERVER: 192.168.19.10#53(192.168.19.10) (UDP)
   ```
 
-- **Found/proved by:** <Actual investigator(s)>
+  The official checker improved from 12.0/25 to 18.25/25.
+
+  This confirmed that the firewall was responsible for the DNS connectivity failure. The remaining lost points came from separate DNS record and DHCP integration issues, which required independent corrections.
+
+- **Found/proved by:** Ye Myat Aung (6705142009); recorded evidence reviewed and documented by Sai Soom Rath (6705142034).
 
 ---
