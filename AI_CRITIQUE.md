@@ -22,6 +22,8 @@ We completed the live investigation and verified four faults before conducting t
 
 However, ChatGPT assisted with reasoning and command planning during our original troubleshooting. We therefore cannot claim that the investigation was entirely AI-independent. The distinction is that we verified each diagnosis through the system's actual behavior rather than accepting an AI explanation without testing it.
 
+Our recorded Killercoda session was on **10 October 2026, from 11:46 AM to 12:29 PM (Thailand time)**. The checker started at **11/25**. We worked through the incorrect zone-file path, the firewall rule blocking DNS, the API record, and the DHCP DNS setting until the final check reached **25/25**. The commands and results are in `session.log`.
+
 The four faults established during our investigation were:
 
 1. **Incorrect forward-zone reference:** BIND referenced `/etc/bind/db.MISSING` instead of the existing `db.novapeak.lab` file.
@@ -36,18 +38,6 @@ The checker results progressed through:
 We tested the system again after each correction. This helped us distinguish an actual cause from other failures that depended on it.
 
 ## Part 3c: Putting the AIs to the test
-
-### Comparison Workflow
-
-```mermaid
-flowchart LR
-    R1["Round 1<br/>Initial failures"]
-    R2["Round 2<br/>Firewall evidence"]
-    R3["Round 3<br/>DNS and DHCP evidence"]
-    V["Compare recommendations<br/>with verified lab results"]
-
-    R1 --> R2 --> R3 --> V
-```
 
 ### How we conducted the comparison
 
@@ -180,6 +170,8 @@ Instead, we verified the two relevant conditions separately:
 - **C9:** DHCP advertised `192.168.19.10`.
 - **C11:** The client successfully resolved `www.novapeak.lab` through its leased resolver.
 
+In `check_lab.py`, C11 queries the DNS address obtained from the DHCP lease directly. This checks whether the client can resolve the hostname through the DNS server advertised by DHCP, rather than testing the normal `/etc/resolv.conf` configuration. Together, C9 and C11 confirmed that DHCP supplied the correct internal DNS address and that the client could successfully query it.
+
 Both passed after we corrected DHCP Option 6 and restarted the service. The checker reached **25/25**.
 
 **Our judgment:** Both identified the correct fault. Claude's verification advice was slightly more suitable for our environment because it recognized that `/etc/resolv.conf` might not represent the DHCP lease. ChatGPT's suggested inspection was useful, but insufficient as final evidence by itself.
@@ -197,6 +189,10 @@ This showed that the reverse lookup failure was caused by the client's inability
 Similarly, both models mentioned possible concerns such as firewall persistence and recursion settings. These may matter in other environments, but our evidence did not establish them as additional faults in this lab.
 
 **Our judgment:** Possible causes were worth considering, but we did not change configurations without evidence. The investigation identified four faults, even though more than four checker conditions initially failed.
+
+**How we judged a recommendation**
+
+We compared each suggestion with what the terminal session actually showed. If the advice matched a repair we performed and verified, we counted it as supported. If it was another possible repair that we never tried, we kept it as **plausible but untested**. If it conflicted with the saved outputs or configuration, we treated it as incorrect for this case. Where the results did not settle the question, we marked it as **not enough evidence**.
 
 ### Overall Comparison
 
